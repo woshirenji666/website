@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>简约记账</title>
+  <style>
+    :root { --gold:#b89042; --gold-light:#f5ecda; --gold-border:#e7d6ae; --ink:#1f1f1f; --muted:#8a867e; --line:#eeeae2; --surface:#fff; --background:#faf9f6; --shadow:0 16px 45px rgba(92,72,35,.08); }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--background); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; -webkit-font-smoothing:antialiased; }
+    button,select { font:inherit; }
+    .page { width:min(1120px,calc(100% - 32px)); margin:0 auto; padding:44px 0 60px; }
+    .topbar { margin-bottom:32px; }
+    h1 { margin:0; font-size:clamp(32px,5vw,52px); line-height:1.08; letter-spacing:-.05em; }
+    .subtitle { margin:12px 0 0; color:var(--muted); font-size:14px; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:26px; }
+    .card { background:var(--surface); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); }
+    .summary-card { padding:23px; min-height:132px; }
+    .summary-card.main { background:var(--gold-light); border-color:var(--gold-border); }
+    .label { color:var(--muted); font-size:13px; margin-bottom:15px; }
+    .amount { font-size:30px; font-weight:800; letter-spacing:-.04em; }
+    .main .amount { color:var(--gold); font-size:38px; }
+    .income .amount { color:#6f9b74; }
+    .amount small { font-size:18px; font-weight:700; margin-right:3px; }
+    .content { padding:26px; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:21px; }
+    h2 { margin:0; font-size:20px; letter-spacing:-.03em; }
+    .filters { display:flex; gap:8px; }
+    select { border:1px solid var(--line); border-radius:10px; outline:none; background:#fff; color:var(--ink); padding:11px 12px; transition:border-color .2s,box-shadow .2s; }
+    select:focus { border-color:var(--gold); box-shadow:0 0 0 3px rgba(184,144,66,.12); }
+    .filters select { min-width:120px; }
+    .transactions { display:flex; flex-direction:column; }
+    .transaction { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:20px; padding:17px 0; border-bottom:1px solid var(--line); }
+    .transaction:last-child { border-bottom:0; }
+    .note { font-weight:700; margin-bottom:6px; }
+    .meta { color:var(--muted); font-size:12px; }
+    .tag { color:var(--gold); background:var(--gold-light); border-radius:6px; padding:5px 8px; font-size:12px; white-space:nowrap; }
+    .tx-amount { font-size:16px; font-weight:800; white-space:nowrap; }
+    .empty { padding:45px 10px; color:var(--muted); text-align:center; }
+    .error { padding:18px; border:1px solid #efd7d2; border-radius:12px; color:#a45d52; background:#fff8f6; font-size:14px; }
+    @media (max-width:800px) { .summary { grid-template-columns:repeat(2,1fr); } }
+    @media (max-width:680px) {
+      .page { width:min(100% - 24px,560px); padding-top:28px; }
+      .summary { grid-template-columns:1fr 1fr; }
+      .summary-card { padding:18px; min-height:118px; }
+      .summary-card.main { grid-column:auto; }
+      .content { padding:19px 16px; }
+      .section-head { align-items:flex-start; flex-direction:column; }
+      .filters, .filters select { width:100%; }
+      .transaction { grid-template-columns:1fr auto; gap:10px; }
+      .transaction .tag { grid-column:2; grid-row:1; justify-self:end; }
+      .transaction .tx-amount { grid-column:2; grid-row:2; justify-self:end; }
+      .transaction .meta { grid-column:1; grid-row:2; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <h1>简约记账</h1>
+      <p class="subtitle" id="todayLabel">加载数据中…</p>
+    </header>
+
+    <section class="summary">
+      <div class="card summary-card main"><div class="label">本月支出</div><div class="amount"><small>¥</small><span id="monthExpense">0.00</span></div></div>
+      <div class="card summary-card income"><div class="label">本月收入</div><div class="amount"><small>¥</small><span id="monthIncome">0.00</span></div></div>
+      <div class="card summary-card"><div class="label">本日支出</div><div class="amount"><small>¥</small><span id="todayExpense">0.00</span></div></div>
+      <div class="card summary-card income"><div class="label">本日收入</div><div class="amount"><small>¥</small><span id="todayIncome">0.00</span></div></div>
+    </section>
+
+    <section class="card content">
+      <div class="section-head"><h2>最近记录</h2><div class="filters"><select id="typeFilter"><option value="全部">全部类型</option><option value="支出">支出</option><option value="收入">收入</option></select><select id="monthFilter"><option value="全部">全部月份</option></select></div></div>
+      <div class="transactions" id="transactions"><div class="empty">正在加载…</div></div>
+    </section>
+  </main>
+
+  <script>
+    let records = [];
+    const $ = id => document.getElementById(id);
+    const money = value => Number(value || 0).toFixed(2);
+    const dateOf = value => new Date(String(value).replace(' ', 'T'));
+    const dateKey = value => { const d = dateOf(value); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+    const monthKey = value => dateKey(value).slice(0,7);
+    const formatDate = value => { const d = dateOf(value); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`; };
+    const escapeHtml = text => String(text ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const today = new Date();
+    const todayKey = dateKey(today.toISOString());
+    const currentMonth = todayKey.slice(0,7);
+
+    function total(type, period) { return records.filter(r => r.type === type && period(r)).reduce((sum, r) => sum + Number(r.amount || 0), 0); }
+    function render() {
+      const type = $('typeFilter').value, month = $('monthFilter').value;
+      const filtered = records.filter(r => (type === '全部' || r.type === type) && (month === '全部' || monthKey(r.date) === month)).sort((a,b) => dateOf(b.date) - dateOf(a.date));
+      $('monthExpense').textContent = money(total('支出', r => monthKey(r.date) === currentMonth));
+      $('monthIncome').textContent = money(total('收入', r => monthKey(r.date) === currentMonth));
+      $('todayExpense').textContent = money(total('支出', r => dateKey(r.date) === todayKey));
+      $('todayIncome').textContent = money(total('收入', r => dateKey(r.date) === todayKey));
+      $('transactions').innerHTML = filtered.length ? filtered.map(r => `<article class="transaction"><div><div class="note">${escapeHtml(r.note)}</div><div class="meta">${formatDate(r.date)} · ${escapeHtml(r.pay)}</div></div><span class="tag">${escapeHtml(r.type)}</span><div class="tx-amount" style="color:${r.type === '收入' ? '#6f9b74' : 'var(--ink)'}">${r.type === '收入' ? '+' : '-'} ¥${money(r.amount)}</div></article>`).join('') : '<div class="empty">暂无符合条件的记录</div>';
+    }
+    function populateMonths() { const months = [...new Set(records.map(r => monthKey(r.date)))].sort().reverse(); $('monthFilter').innerHTML = '<option value="全部">全部月份</option>' + months.map(m => `<option value="${m}">${m.replace('-', ' 年 ')} 月</option>`).join(''); }
+    async function loadData() {
+      try {
+        const response = await fetch('./BookKeepingData.json', { cache:'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        records = Array.isArray(data) ? data : (Array.isArray(data.records) ? data.records : []);
+        $('todayLabel').textContent = '数据加载完毕';
+        populateMonths(); render();
+      } catch (error) {
+        $('todayLabel').textContent = '数据加载失败';
+        $('transactions').innerHTML = '<div class="error">无法读取数据。</div>';
+      }
+    }
+    $('typeFilter').onchange = render; $('monthFilter').onchange = render;
+    loadData();
+  </script>
+</body>
+</html>
