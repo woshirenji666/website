@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>毕业设计选题一览</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#18181b; --muted:#71717a;
+  --line:#e4e4e7; --row-line:#f4f4f5; --hover:#fafafa;
+  --chip:#f4f4f5; --chip-fg:#3f3f46; --accent:#2563eb;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f0f10; --fg:#f4f4f5; --muted:#8e8e93;
+    --line:#27272a; --row-line:#1c1c1f; --hover:#1a1a1d;
+    --chip:#27272a; --chip-fg:#d4d4d8; --accent:#60a5fa;
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:56px 28px 96px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+h1{font-size:24px;font-weight:600;letter-spacing:.01em}
+.meta{margin-top:8px;font-size:13px;color:var(--muted)}
+.meta b{color:var(--fg);font-weight:600}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#search{
+  width:280px;max-width:100%;padding:9px 14px;font-size:14px;
+  color:var(--fg);background:var(--bg);
+  border:1px solid var(--line);border-radius:8px;outline:none;
+  transition:border-color .15s;
+}
+#search:focus{border-color:var(--accent)}
+#search::placeholder{color:var(--muted)}
+#chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{
+  padding:8px 14px;font-size:13px;cursor:pointer;user-select:none;
+  color:var(--chip-fg);background:var(--chip);border:none;border-radius:8px;
+}
+.chip.active{background:var(--fg);color:var(--bg)}
+.table-box{margin-top:28px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{
+  position:sticky;top:0;z-index:1;background:var(--bg);
+  text-align:left;font-weight:500;font-size:12px;color:var(--muted);
+  padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;
+}
+tbody td{padding:12px;border-bottom:1px solid var(--row-line);vertical-align:top;line-height:1.55}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--hover)}
+td.num,td.sid{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+td.name{white-space:nowrap;font-weight:500}
+td.advisor{white-space:nowrap}
+td.title-cell{min-width:280px}
+.tag{display:inline-block;font-size:11.5px;line-height:1;padding:5px 9px;border-radius:999px;background:var(--chip);color:var(--chip-fg);white-space:nowrap}
+.none{color:var(--muted);opacity:.5}
+.status{padding:110px 0;text-align:center;color:var(--muted);font-size:14px;line-height:2}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}
+@media (max-width:720px){
+  .wrap{padding:36px 16px 64px}
+  h1{font-size:20px}
+  th,td{padding-left:8px;padding-right:8px}
+  .col-sid,.col-class{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>毕业设计选题一览</h1>
+      <p class="meta" id="meta">加载中…</p>
+    </div>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="搜索姓名 / 学号 / 老师 / 题目…" autocomplete="off" />
+      <div id="chips"></div>
+    </div>
+  </header>
+
+  <div class="table-box">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th class="col-sid">学号</th>
+          <th class="col-class">班级</th>
+          <th>姓名</th>
+          <th>指导老师</th>
+          <th>职称</th>
+          <th>论文题目</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p class="status hide" id="status"></p>
+  </div>
+</div>
+
+<script>
+const state = { data: [], q: '', klass: '全部' };
+
+/* ---------- 加载数据 ---------- */
+fetch('./data.json')
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+  .then(json => {
+    state.data = json.sort((a, b) => a.serialNumber - b.serialNumber);
+    init();
+  })
+  .catch(() => {
+    document.getElementById('meta').textContent = '';
+    const s = document.getElementById('status');
+    s.classList.remove('hide');
+    s.innerHTML = '无法加载 <code>data.json</code>。<br>' +
+      '请确认它与本页面位于同一目录，并通过 HTTP 方式访问<br>' +
+      '（如 GitHub Pages，或本地运行 <code>python -m http.server</code>）。';
+  });
+
+/* ---------- 初始化 ---------- */
+function init(){
+  const classes = [...new Set(state.data.map(d => d.className))];
+  const chips = document.getElementById('chips');
+  chips.innerHTML = ['全部', ...classes]
+    .map(c => `<button class="chip${c === '全部' ? ' active' : ''}" data-k="${c}">${c}</button>`)
+    .join('');
+  chips.addEventListener('click', e => {
+    const btn = e.target.closest('.chip'); if (!btn) return;
+    state.klass = btn.dataset.k;
+    chips.querySelectorAll('.chip').forEach(b => b.classList.toggle('active', b === btn));
+    render();
+  });
+
+  document.getElementById('search').addEventListener('input', e => {
+    state.q = e.target.value.trim().toLowerCase();
+    render();
+  });
+
+  render();
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+  const { data, q, klass } = state;
+  const rows = data.filter(d => {
+    if (klass !== '全部' && d.className !== klass) return false;
+    if (!q) return true;
+    return [d.name, d.studentId, d.advisor, d.advisorTitle, d.thesisTitle]
+      .some(v => (v || '').toString().toLowerCase().includes(q));
+  });
+
+  const done = data.filter(d => d.thesisTitle).length;
+  document.getElementById('meta').innerHTML =
+    `共 <b>${data.length}</b> 名学生 · 已定题 <b>${done}</b> · 待定 <b>${data.length - done}</b> · 当前显示 <b>${rows.length}</b> 条`;
+
+  const tbody = document.getElementById('tbody');
+  if (!rows.length){
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:48px 0">没有匹配的结果</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(d => `
+    <tr>
+      <td class="num">${d.serialNumber}</td>
+      <td class="sid col-sid">${esc(d.studentId)}</td>
+      <td class="col-class">${esc(d.className)}</td>
+      <td class="name">${esc(d.name)}</td>
+      <td class="advisor">${esc(d.advisor)}</td>
+      <td><span class="tag">${esc(d.advisorTitle)}</span></td>
+      <td class="title-cell">${d.thesisTitle ? esc(d.thesisTitle) : '<span class="none">—</span>'}</td>
+    </tr>`).join('');
+}
+
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+</script>
+</body>
+</html>
